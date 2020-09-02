@@ -36,7 +36,6 @@ pub const Port = struct {
     fd: c_int = -1,
     path: [:0]const u8,
 
-
     pub fn init(path: [:0]const u8) OpenError!Port {
         const port = Port{
             .fd = c.open(path, c.O_RDWR | c.O_NOCTTY | c.O_NDELAY),
@@ -53,7 +52,7 @@ pub const Port = struct {
         for (scanList) |path| {
             if (Port.init(path)) |port| {
                 return port;
-            }else |_| {}            
+            } else |_| {}
         }
         return null;
     }
@@ -61,7 +60,6 @@ pub const Port = struct {
     pub fn getPath(self: Self) [:0]const u8 {
         return self.path;
     }
-
 
     pub fn setCommParameter(self: Self, baud: Baudrate, parity: Parity, stop: StopBits) OpenError!void {
         const c_baud: c_uint = @enumToInt(baud);
@@ -108,6 +106,16 @@ pub const Port = struct {
         if (ret < 0)
             return error.NotAvailable;
     }
+
+    pub fn clearRxBuffer(self: *Self) !void {
+        var buf: [64]u8 = undefined;
+        while (true) {
+            const len = try self.reader().read(&buf);
+            if (len == 0)
+                return;
+        }
+    }
+
     pub fn deinit(self: *Self) void {
         if (self.fd >= 0) {
             _ = c.close(self.fd);
@@ -160,10 +168,9 @@ pub const Port = struct {
                     std.debug.warn("unknown from port err = {}, {}\n", .{ len, errno });
                     return error.Other;
                 },
-
             }
         }
 
         return @intCast(usize, len);
-    }    
+    }
 };
