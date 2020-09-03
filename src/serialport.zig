@@ -18,6 +18,7 @@ pub const Port = struct {
     pub const OpenError = error{NotAvailable};
 
     pub const Parity = enum { None, Even, Odd };
+    pub const DataBits = enum(c_uint) { B5 = c.CS5, B6 = c.CS6, B7 = c.CS7, B8 = c.CS8 };
     pub const StopBits = enum { S1_0, S1_5, S2_0 };
     pub const Baudrate = enum(c_uint) {
         B1200 = c.B1200,
@@ -29,6 +30,7 @@ pub const Port = struct {
         B115200 = c.B115200,
         B230400 = c.B230400,
     };
+    pub const FlowCtrl = enum { None, RtsCts, XonXoff };
 
     pub const Writer = std.io.Writer(*Self, ReadWriteError, writeBytes);
     pub const Reader = std.io.Reader(*Self, ReadWriteError, readBytes);
@@ -61,50 +63,63 @@ pub const Port = struct {
         return self.path;
     }
 
-    pub fn setCommParameter(self: Self, baud: Baudrate, parity: Parity, stop: StopBits) OpenError!void {
+    pub fn setCommParameter(self: Self, baud: Baudrate, databits: DataBits, parity: Parity, stopbits: StopBits, flow_ctrl: FlowCtrl) OpenError!void {
         const c_baud: c_uint = @enumToInt(baud);
-
-        if (stop != .S1_0)
-            return error.NotAvailable;
+        const c_databits: c_uint = @enumToInt(databits);
 
         var options: c.termios = undefined;
         if (c.tcgetattr(self.fd, &options) < 0)
             return error.NotAvailable;
 
-        if (c.cfsetispeed(&options, c_baud) < 0)
-            return error.NotAvailable;
+        //        if (c.cfsetispeed(&options, c_baud) < 0)
+        //            return error.NotAvailable;
+        //
+        //        if (c.cfsetospeed(&options, c_baud) < 0)
+        //            return error.NotAvailable;
+        options.c_cflag = c_baud;
+        options.c_cflag |= c_databits;
 
-        if (c.cfsetospeed(&options, c_baud) < 0)
-            return error.NotAvailable;
-
-        options.c_cflag |= (c.CLOCAL | c.CREAD);
+        //        options.c_cflag |= (c.CLOCAL | c.CREAD);
 
         switch (parity) {
-            .None => {
-                options.c_cflag &= ~@as(c_uint, c.PARENB);
-            },
-            .Even => {
-                options.c_cflag |= c.PARENB;
-                options.c_cflag &= ~@as(c_uint, c.PARODD);
-            },
+            .None => {},
+            .Even => options.c_cflag |= c.PARENB,
             .Odd => {
                 options.c_cflag |= c.PARENB;
                 options.c_cflag |= c.PARODD;
             },
         }
 
+        switch (stopbits) {
+            .S1_0 => {},
+            .S1_5 => return OpenError.NotAvailable,
+            .S2_0 => options.c_cflag |= c.CSTOPB,
+        }
+        options.c_cflag |= c.CREAD;
+        options.c_iflag = c.IGNPAR | c.IGNBRK;
+
+        switch (flow_ctrl) {
+            .None => options.c_cflag |= c.CLOCAL,
+            .RtsCts => options.c_cflag |= c.CRTSCTS,
+            .XonXoff => options.c_cflag |= c.IXON | c.IXOFF,
+        }
+
         // RAW, not line oriented input, no echo
-        options.c_lflag &= ~@as(c_uint, (c.ICANON | c.ECHO | c.ECHOE | c.ISIG));
-        options.c_cc[c.VMIN] = 0; // es funktioniert nur 0?! => non-blocking auf mindestens 1 Zeichen warten,
-        options.c_cc[c.VTIME] = 0; // es funktioniert nur 0?! => non-blocking aber maxinal 1 deziseconds = 0.1s
+        options.c_oflag = 0;
+        options.c_lflag = 0;
+        options.c_cc[c.VTIME] = 0;
+        options.c_cc[c.VMIN] = 1;
 
         if (c.tcsetattr(self.fd, c.TCSANOW, &options) < 0)
             return error.NotAvailable;
-
-        // return immediately
-        const ret = std.os.fcntl(self.fd, c.F_SETFL, c.FNDELAY) catch return error.NotAvailable;
-        if (ret < 0)
+        if (c.tcflush(self.fd, c.TCOFLUSH) < 0)
             return error.NotAvailable;
+        if (c.tcflush(self.fd, c.TCIFLUSH) < 0)
+            return error.NotAvailable;
+
+        //        const ret = std.os.fcntl(self.fd, c.F_SETFL, c.FNDELAY) catch return error.NotAvailable;
+        //        if (ret < 0)
+        //            return error.NotAvailable;
     }
 
     pub fn clearRxBuffer(self: *Self) !void {
@@ -158,9 +173,6 @@ pub const Port = struct {
         const len: isize = c.read(self.fd, buffer.ptr, buffer.len);
         if (len < 0) {
             const errno = std.os.errno(len);
-
-            if (len == 0 and errno == 0)
-                return error.PortRemoved; // serielle USB-Schnittstelle z.B. abgezogen
 
             switch (errno) {
                 c.EAGAIN => return 0, // Buffer ist einfach leer und nichts zu lesen

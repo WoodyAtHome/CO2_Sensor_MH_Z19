@@ -2,6 +2,8 @@ const std = @import("std");
 const serial = @import("serialport.zig");
 const date = @import("localtime.zig");
 
+pub const log_level = std.log.Level.info;
+
 pub const MH_Z19 = struct {
     const Cmd = enum(u8) {
         getConcentration = 0x86,
@@ -30,15 +32,18 @@ pub const MH_Z19 = struct {
 
         var resp_len: usize = 0;
         const start = std.time.milliTimestamp();
+        // 9 + 9 Bytes @ 9600 baud ca 19ms
+        std.time.sleep(std.time.ns_per_ms * 20);
         while (resp_len < msg_len) {
-            std.time.sleep(std.time.ns_per_ms * 10);
             resp_len += try port.reader().read(resp[resp_len..]);
+            resp_len += try port.reader().read(resp[resp_len..]);
+            std.log.debug("read {} bytes: {x}", .{ resp_len, resp[0..resp_len] });
             if (std.time.milliTimestamp() - start > timeoutInMs) {
                 std.log.debug("read timeout: read only {} bytes: {x}", .{ resp_len, resp[0..resp_len] });
                 return error.Timeout;
             }
+            std.time.sleep(std.time.ns_per_ms * 5);
         }
-        //std.log.info("read done", .{});
 
         switch (decodeResponse(resp)) {
             Response.concentration => |val| return val,
@@ -90,18 +95,22 @@ pub fn main() anyerror!void {
     defer port.deinit();
     std.log.info("using port {}", .{port.getPath()});
 
-    try port.setCommParameter(.B9600, .None, .S1_0);
+    try port.setCommParameter(.B9600, .B8, .None, .S1_0, .None);
+
+    // nach dem Einschalten werden 4 Bytes gesendet,  ff38a3e4, die müssen ggf. erst gelesen werden
+    // der Delay ist unklar warum der hier rein muss
+    std.time.sleep(std.time.ns_per_ms * 500);
+    try port.clearRxBuffer();
 
     const start = std.time.timestamp();
-    //while (std.time.timestamp() - start < 10){
-    while (true) {
-        const co2: u16 = MH_Z19.getConcentration(&port) catch |err| {
-            std.log.err("MH_Z19.getConcentration = {}", .{err});
-            continue;
-        };
+    while (std.time.timestamp() - start < 3600) {
         date.printNowLocal();
-        std.log.info(": CO2 conentration = {}", .{co2});
-        std.time.sleep(std.time.ns_per_s * 2);
+        if (MH_Z19.getConcentration(&port)) |co2| {
+            std.log.info(": CO2 conentration = {} ppm", .{co2});
+        } else |err| {
+            std.log.err(": MH_Z19.getConcentration = {}", .{err});
+        }
+        std.time.sleep(std.time.ns_per_s * 10);
     }
 }
 
