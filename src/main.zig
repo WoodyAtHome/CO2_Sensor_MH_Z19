@@ -85,7 +85,11 @@ pub const MH_Z19 = struct {
 };
 
 pub fn main() anyerror!void {
-    const port_names = &[_][:0]const u8{ "/dev/ttyUSB0", "/dev/ttyUSB1" };
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = &gpa.allocator;
+
+    const port_names = &[_][:0]const u8{ "/dev/ttyUSB1", "/dev/ttyUSB0" };
     var port = serial.Port.openAny(port_names) orelse {
         for (port_names) |name| {
             std.log.err("{}: not avaiable", .{name});
@@ -103,7 +107,8 @@ pub fn main() anyerror!void {
     try port.clearRxBuffer();
 
     const start = std.time.timestamp();
-    while (std.time.timestamp() - start < 3600) {
+    //while (std.time.timestamp() - start < 3600) {
+    while (true) {
         date.printNowLocal();
         if (MH_Z19.getConcentration(&port)) |co2| {
             std.log.info(": CO2 conentration = {} ppm", .{co2});
