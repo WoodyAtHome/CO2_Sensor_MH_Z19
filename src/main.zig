@@ -32,7 +32,8 @@ pub fn main() anyerror!void {
     while (true) {
         date.printNowLocal();
         if (MH_Z19.getConcentration(&port)) |co2| {
-            std.log.info(": CO2 conentration = {} ppm", .{co2});
+            const accuracy = co2 * 5 / 100 + 50;
+            std.log.info(": CO2 conentration = {} ± {} ppm", .{ co2, accuracy });
         } else |err| {
             std.log.err(": MH_Z19.getConcentration = {}", .{err});
         }
