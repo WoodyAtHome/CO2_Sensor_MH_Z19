@@ -26,7 +26,6 @@ pub fn build(b: *Builder) void {
     exe.linkLibC();
     exe.install();
 
-    b.default_step.dependOn(&exe.step);
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());
     const run_step = b.step("run", "Run the app");
@@ -37,6 +36,8 @@ pub fn build(b: *Builder) void {
     rpi_exe.setBuildMode(mode);
     rpi_exe.linkLibC();
     rpi_exe.install();
+    rpi_exe.step.dependOn(&exe.step);
+    b.default_step.dependOn(&exe.step);
 
     const kill_exe_cmd = b.addSystemCommand(&[_][]const u8{ "ssh", "pi@homeserver", "killall", "-q", rpi_target.name });
     kill_exe_cmd.step.dependOn(&rpi_exe.step);
@@ -44,6 +45,7 @@ pub fn build(b: *Builder) void {
     const cmd_arg = std.fmt.allocPrint(b.allocator, "zig-cache/bin/{}", .{rpi_target.name}) catch @panic("Out of memory");
     defer b.allocator.free(cmd_arg);
     const update_exe_cmd = b.addSystemCommand(&[_][]const u8{ "scp", cmd_arg, "scp://pi@homeserver/" });
+    update_exe_cmd.step.dependOn(&rpi_exe.step);
 
     const cmd_arg2 = std.fmt.allocPrint(b.allocator, "'nohup ./{}>>/media/co2.txt 2>&1 &'", .{rpi_target.name}) catch @panic("Out of memory");
     defer b.allocator.free(cmd_arg2);

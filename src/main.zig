@@ -36,7 +36,7 @@ pub fn main() anyerror!void {
         } else |err| {
             std.log.err(": MH_Z19.getConcentration = {}", .{err});
         }
-        std.time.sleep(std.time.ns_per_s * 10);
+        std.time.sleep(std.time.ns_per_min * 5);
     }
 }
 
