@@ -50,6 +50,9 @@ pub fn build(b: *Builder) void {
     const start_exe_cmd = b.addSystemCommand(&[_][]const u8{ "ssh", "pi@homeserver", "bash", "-c", cmd_arg2 });
     start_exe_cmd.step.dependOn(&update_exe_cmd.step);
 
+    var buildrpi_step = b.step("rpi", "build the rpi executable");
+    buildrpi_step.dependOn(&rpi_exe.step);
+
     var update_step = b.step("update_rpi", "sstop & update & start the rpi executable");
     update_step.dependOn(&kill_exe_cmd.step);
     update_step.dependOn(&start_exe_cmd.step);
