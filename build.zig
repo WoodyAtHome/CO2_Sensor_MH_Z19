@@ -45,7 +45,7 @@ pub fn build(b: *Builder) void {
     const cmd_arg = std.fmt.allocPrint(b.allocator, "zig-cache/bin/{}", .{rpi_target.name}) catch @panic("Out of memory");
     defer b.allocator.free(cmd_arg);
     const update_exe_cmd = b.addSystemCommand(&[_][]const u8{ "scp", cmd_arg, "scp://pi@homeserver/" });
-    update_exe_cmd.step.dependOn(&rpi_exe.step);
+    update_exe_cmd.step.dependOn(b.getInstallStep());
 
     const cmd_arg2 = std.fmt.allocPrint(b.allocator, "'nohup ./{}>>/media/co2.txt 2>&1 &'", .{rpi_target.name}) catch @panic("Out of memory");
     defer b.allocator.free(cmd_arg2);
@@ -53,12 +53,12 @@ pub fn build(b: *Builder) void {
     start_exe_cmd.step.dependOn(&update_exe_cmd.step);
 
     var buildrpi_step = b.step("rpi", "build the rpi executable");
-    buildrpi_step.dependOn(&rpi_exe.step);
+    buildrpi_step.dependOn(b.getInstallStep());
 
-    var update_step = b.step("update_rpi", "sstop & update & start the rpi executable");
+    var update_step = b.step("restart_rpi", "sstop & update & start the rpi executable");
     update_step.dependOn(&kill_exe_cmd.step);
     update_step.dependOn(&start_exe_cmd.step);
 
-    var update_rpi_step = b.step("run_rpi", "update & start the rpi executable");
+    var update_rpi_step = b.step("start_rpi", "update & start the rpi executable");
     update_rpi_step.dependOn(&start_exe_cmd.step);
 }
