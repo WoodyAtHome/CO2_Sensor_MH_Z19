@@ -1,0 +1,9 @@
+set xdata time
+set timefmt "%d.%m.%y"
+# set xrange auto
+set yrange [0:1500]
+set format x "%H:%M"
+set timefmt "%d.%m.%Y %H:%M:%S:"
+plot "co2.txt" using 1:6 with line
+pause 2
+reread
